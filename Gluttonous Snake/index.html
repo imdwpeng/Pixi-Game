@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+    <style>
+        * {padding: 0; margin: 0}
+    </style>
+</head>
+<body>
+    
+</body>
+<script src="pixi.min.js"></script>
+<script src="keyboard.js"></script>
+<script src="hitTestRectangle.js"></script>
+<script type="text/javascript">
+
+    const {Application, loader, Sprite, Graphics, Container, TextStyle, Text} = PIXI;
+    const {innerWidth, innerHeight} = window;
+    const iW = Math.floor(innerWidth/16)*16;
+    const iH = Math.floor(innerHeight/16)*16;
+
+    let dataSource = [];
+    let target;
+    let moveTimer;
+
+    let app = new Application();
+    document.body.appendChild(app.view)
+    app.renderer.backgroundColor = 0x061639;
+    app.renderer.view.style.position = "absolute";
+    app.renderer.view.style.display = "block";
+    app.renderer.view.style.left = (innerWidth - iW)/2+'px';
+    app.renderer.view.style.top = (innerHeight - iH)/2+'px';
+    app.renderer.view.style.display = "block";
+    app.renderer.autoResize = true;
+    app.renderer.resize(iW, iH);
+    
+    // grid background
+    for(let i=0; i<iH/16; i+=1){
+        let line = new Graphics();
+        line.lineStyle(1, 0xffffff, .6);
+        line.moveTo(0, 0);
+        line.lineTo(iW, 0);
+        line.x = 0;
+        line.y = 16*i;
+        app.stage.addChild(line);
+    }
+    for(let i=0; i<iW/16; i+=1){
+        let line = new Graphics();
+        line.lineStyle(1, 0xffffff, .6);
+        line.moveTo(0, 0);
+        line.lineTo(0, iH);
+        line.x = 16*i;
+        line.y = 0;
+        app.stage.addChild(line);
+    }
+
+    // start
+    let startSource = new Graphics();
+    startSource.beginFill(0x66CCFF);
+    startSource.drawRect(0,0,16,16);
+    startSource.endFill();
+    startSource.x = 0;
+    startSource.y = 0;
+    startSource.vx = 16;
+    startSource.vy = 0;
+    app.stage.addChild(startSource);
+    dataSource.push(startSource);
+
+    // game over scene
+    let gameOverScene = new Container();
+    gameOverScene.visible = false;
+
+    let gameOverBg = new Graphics();
+    gameOverBg.beginFill(0x000000);
+    gameOverBg.drawRect(0, 0, 500, 300);
+    gameOverBg.endFill();
+    gameOverBg.x = ( app.stage.width - 500) / 2;
+    gameOverBg.y = ( app.stage.height - 300) / 2;
+    gameOverScene.addChild(gameOverBg);
+
+    let style = new TextStyle({
+        fontFamily: "Arial",
+        fontSize: 64,
+        fill: "white",
+        stroke: '#ff3300',
+        strokeThickness: 4,
+        dropShadow: true,
+        dropShadowColor: "#fff",
+        dropShadowBlur: 4,
+        dropShadowAngle: Math.PI / 6,
+        dropShadowDistance: 6
+    });
+    let message = new Text("Game Over !", style);
+    message.x = app.stage.width / 2 - 180;
+    message.y = app.stage.height / 2 - 64;
+    gameOverScene.addChild(message);
+
+    let refreshTxt = new Text("restart", {fontSize: 32,fill: "white"});
+    refreshTxt.x = app.stage.width / 2 - 64;
+    refreshTxt.y = app.stage.height / 2 + 64;
+    refreshTxt.visible = false;
+    gameOverScene.addChild(refreshTxt);
+
+    let refreshIcon = loader.add('refresh.png').load(setup)
+
+    function setup() {
+        let icon = new Sprite(loader.resources["refresh.png"].texture);
+        icon.width = 32;
+        icon.height = 32;
+        icon.x = app.stage.width / 2 - 32;
+        icon.y = app.stage.height / 2 + 32;
+        // click event must set interactive and buttonMode
+        icon.interactive = true;
+        icon.buttonMode = true;
+        icon.on('pointerdown',()=>{
+            window.location.reload()
+        })
+        icon.on('pointerover',()=>{
+            refreshTxt.visible = true;
+        })
+        icon.on('pointerout',()=>{
+            refreshTxt.visible = false;
+        })
+        gameOverScene.addChild(icon);
+    }
+
+    app.stage.addChild(gameOverScene);
+
+    createTarget();
+
+    //Capture the keyboard arrow keys
+    let left = keyboard(37);
+    let up = keyboard(38);
+    let right = keyboard(39);
+    let down = keyboard(40);
+    left.press = () => {
+        // if direction is right,can not change to left
+        if(dataSource.length > 1 && dataSource[0].vx === 16) return;
+        // prevent continuous change of direction,i.e. continuous keydown left down right
+        if(dataSource.length > 1 && dataSource[1].x === dataSource[0].x-16 && dataSource[1].y === dataSource[0].y) return;
+        
+        dataSource[0].vx = -16;
+        dataSource[0].vy = 0;
+    };
+
+    //Up
+    up.press = () => {
+        // if direction is down,can not change to up
+        if(dataSource.length > 1 && dataSource[0].vy === 16) return;
+        // prevent continuous change of direction,i.e. continuous keydown left down right
+        if(dataSource.length > 1 && dataSource[1].y === dataSource[0].y-16 && dataSource[1].x === dataSource[0].x) return;
+        
+        dataSource[0].vy = -16;
+        dataSource[0].vx = 0;
+    };
+
+    //Right
+    right.press = () => {
+       // if direction is left,can not change to right
+       if(dataSource.length > 1 && dataSource[0].vx === -16) return;
+        // prevent continuous change of direction,i.e. continuous keydown left down right
+        if(dataSource.length > 1 && dataSource[1].x === dataSource[0].x+16 && dataSource[1].y === dataSource[0].y) return;
+        
+        dataSource[0].vx = 16;
+        dataSource[0].vy = 0;
+    };
+
+    //Down
+    down.press = () => {
+        // if direction is up,can not change to down
+        if(dataSource.length > 1 && dataSource[0].vy === -16) return;
+        // prevent continuous change of direction,i.e. continuous keydown left down right
+        if(dataSource.length > 1 && dataSource[1].y === dataSource[0].y+16 && dataSource[1].x === dataSource[0].x) return;
+        
+        dataSource[0].vy = 16;
+        dataSource[0].vx = 0;
+    };
+
+    moveTimer = setInterval(()=>{
+        let tempX;
+        let tempY;
+        let lastX;
+        let lastY;
+
+        // snake move
+        dataSource.map((item,i)=>{
+            // temp save the last position of snake dataSource
+            if(dataSource.length === 1 || i === dataSource.length-1){
+                lastX = item.x;
+                lastY = item.y;
+            }
+
+            if(i === 0){
+                tempX = item.x;
+                tempY = item.y;
+                item.x += item.vx;
+                item.y += item.vy;
+            }else{
+                // refresh position based on prev of this item.
+                const iX = item.x;
+                const iY = item.y;
+                item.x = tempX;
+                item.y = tempY;
+                tempX = iX;
+                tempY = iY;
+            }
+
+            return item;
+        })
+
+        // snake eat target
+        if(hitTestRectangle(dataSource[0],target)){
+            let addSource = new Graphics();
+            addSource.beginFill(0x66CCFF);
+            addSource.drawRect(0,0,16,16);
+            addSource.endFill();
+            addSource.x = lastX;
+            addSource.y = lastY;
+            app.stage.addChild(addSource);    
+            changeTarget();
+            dataSource.push(addSource)
+        }
+
+        // snake can not hit itself
+        dataSource.forEach((item,i)=>{
+            if(i>0 && dataSource.length > 1 && hitTestRectangle(dataSource[0],item)){
+                console.log(dataSource[0].x,item.x)
+                clearInterval(moveTimer)
+                gameOverScene.visible = true;
+            }
+        });
+
+        // snake can not move out of the boundary
+        if(dataSource[0].x < 0 || dataSource[0].x > iW || dataSource[0].y < 0 || dataSource[0].y > iH){
+            clearInterval(moveTimer)
+            gameOverScene.visible = true;
+        }
+    },300)
+
+    // create target object
+    function createTarget() {
+        const iX = parseInt(Math.random()*iW/16)*16;
+        const iY = parseInt(Math.random()*iH/16)*16;
+        target = new Graphics();
+        target.beginFill(0x66CCFF);
+        target.drawRect(0,0,16,16);
+        target.endFill();
+        target.x = iX;
+        target.y = iY;
+        app.stage.addChild(target);
+    }
+
+    // change target position
+    function changeTarget(){
+        const iX = parseInt(Math.random()*iW/16)*16;
+        const iY = parseInt(Math.random()*iH/16)*16;
+        if(iX === target.x && iY === target.iY){
+            changeTarget();
+        }else{
+            target.x = iX;
+            target.y = iY;
+        }
+    }
+
+  </script>
+</html>
